@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>3D Car Racing Game - Starter</title>
+<style>
+body { margin:0; overflow:hidden; }
+#ui { position:absolute; top:10px; left:10px; color:white; font-size:18px; font-family:Arial; }
+#startBtn {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  padding:20px 40px; font-size:24px;
+  background:#ff0000; color:white;
+  border:none; cursor:pointer; border-radius:10px;
+}
+</style>
+</head>
+<body>
+<div id="ui">Score: 0 | Level: 1</div>
+<button id="startBtn">START GAME</button>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script>
+let gameStarted=false;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xf0e68c); // desert sand
+
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,2000);
+camera.position.set(0,8,15);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* LIGHTS */
+scene.add(new THREE.AmbientLight(0xffffff,0.6));
+const sunLight=new THREE.DirectionalLight(0xffffff,1);
+sunLight.position.set(50,80,50);
+scene.add(sunLight);
+
+/* 3D SUN */
+const sun=new THREE.Mesh(
+  new THREE.SphereGeometry(5,32,32),
+  new THREE.MeshBasicMaterial({color:0xffdd44})
+);
+sun.position.set(50,60,-200);
+scene.add(sun);
+
+/* ROAD */
+const road=new THREE.Mesh(
+  new THREE.PlaneGeometry(22,2000),
+  new THREE.MeshStandardMaterial({color:0x555555})
+);
+road.rotation.x=-Math.PI/2;
+road.position.z=-1000;
+scene.add(road);
+
+/* TREES / CACTUS */
+const trees=[];
+function createTree(x,z){
+  const t=new THREE.Group();
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5,0.7,5),
+    new THREE.MeshStandardMaterial({color:0x8b4513})
+  ); trunk.position.y=2.5;
+  const leaves=new THREE.Mesh(
+    new THREE.SphereGeometry(2.5,24,24),
+    new THREE.MeshStandardMaterial({color:0x0b6623})
+  ); leaves.position.y=6;
+  t.add(trunk,leaves);
+  t.position.set(x,0,z);
+  scene.add(t);
+  trees.push(t);
+}
+for(let i=0;i<50;i++){
+  createTree(-9,-i*25);
+  createTree(9,-i*25);
+}
+
+/* THAR CAR */
+const car=new THREE.Group();
+const body=new THREE.Mesh(
+  new THREE.BoxGeometry(3,1.2,6),
+  new THREE.MeshStandardMaterial({color:0xff0000})
+);
+body.position.y=1; car.add(body);
+const cabin=new THREE.Mesh(
+  new THREE.BoxGeometry(2.2,1.2,2.5),
+  new THREE.MeshStandardMaterial({color:0xffffff})
+);
+cabin.position.set(0,1.9,-0.5); car.add(cabin);
+function wheel(x,z){
+  const w=new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7,0.7,0.7,20),
+    new THREE.MeshStandardMaterial({color:0x000000})
+  ); w.rotation.z=Math.PI/2; w.position.set(x,0.5,z); car.add(w);
+}
+wheel(-1.6,2.3); wheel(1.6,2.3); wheel(-1.6,-2.3); wheel(1.6,-2.3);
+scene.add(car);
+
+/* COINS & DIAMONDS */
+const items=[];
+function createCoin(z){
+  const c=new THREE.Mesh(
+    new THREE.TorusGeometry(0.6,0.2,16,32),
+    new THREE.MeshStandardMaterial({color:0xffd700})
+  ); c.rotation.x=Math.PI/2;
+  c.position.set((Math.random()*8)-4,1,z);
+  scene.add(c); items.push({mesh:c,type:"coin"});
+}
+function createDiamond(z){
+  const d=new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.7),
+    new THREE.MeshStandardMaterial({color:0x00ffff})
+  );
+  d.position.set((Math.random()*8)-4,1.2,z); scene.add(d);
+  items.push({mesh:d,type:"diamond"});
+}
+for(let i=0;i<40;i++){
+  createCoin(-i*25);
+  if(i%4===0) createDiamond(-i*40);
+}
+
+/* CONTROLS */
+let speed=0,steer=0,score=0,level=1;
+const keys={};
+addEventListener("keydown",e=>keys[e.key]=true);
+addEventListener("keyup",e=>keys[e.key]=false);
+
+/* ANIMATION */
+function animate(){
+  requestAnimationFrame(animate);
+  if(!gameStarted) return;
+
+  if(keys["ArrowUp"]) speed+=0.01; else speed*=0.98;
+  speed=Math.min(speed,0.8);
+  if(keys["ArrowLeft"]) steer+=0.003; if(keys["ArrowRight"]) steer-=0.003;
+  steer*=0.9;
+
+  car.position.z-=speed;
+  car.position.x+=steer*12;
+  car.position.x=THREE.MathUtils.clamp(car.position.x,-5,5);
+
+  // Collect items
+  items.forEach(i=>{
+    i.mesh.rotation.y+=0.05;
+    if(i.mesh.position.distanceTo(car.position)<1.5){
+      score+=(i.type==="coin"?10:50);
+      i.mesh.position.z=car.position.z-800;
+    }
+  });
+
+  // Trees loop
+  trees.forEach(t=>{ if(t.position.z-car.position.z>10) t.position.z-=1400; });
+
+  level=Math.floor(-car.position.z/200)+1;
+  document.getElementById("ui").innerText=`Score: ${score} | Level: ${level}`;
+
+  camera.position.z+=(car.position.z+15-camera.position.z)*0.08;
+  camera.position.x+=(car.position.x-camera.position.x)*0.08;
+  camera.lookAt(car.position);
+
+  renderer.render(scene,camera);
+}
+animate();
+
+/* START BUTTON */
+document.getElementById("startBtn").addEventListener("click",()=>{
+  gameStarted=true; document.getElementById("startBtn").style.display="none";
+});
+
+/* RESIZE */
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
